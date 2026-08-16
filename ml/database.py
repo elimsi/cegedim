@@ -53,13 +53,11 @@ def get_transaction_by_id(transaction_id: int) -> dict | None:
     """Fetch a single transaction by ID for the LLM explain endpoint."""
     query = """
         SELECT f.id, f.num_ps, f.montant, f.nb_actes, f.statut,
-               f.flag_anomalie, f.score_anomalie, f.ecart_vs_historique,
-               f.montant_moyen_historique_ps, f.date_execution, f.fichier_source,
-               p.intitule, p.specialite, p.region, p.email,
-               COALESCE(a.code_acte, '') AS code_acte
-        FROM fact_traitements f
-        LEFT JOIN dim_ps p ON f.num_ps = p.num_ps
-        LEFT JOIN dim_actes a ON f.code_acte_id = a.code_acte_id
+               f.flag_anomalie, f.score_anomalie, 0 AS ecart_vs_historique,
+               0 AS montant_moyen_historique_ps, f.date_virement AS date_execution, f.fichier_source,
+               f.intitule, f.specialite, f.region, f.email,
+               f.code_acte
+        FROM silver_traitements f
         WHERE f.id = %(id)s
     """
     df = pd.read_sql(query, engine, params={"id": transaction_id})

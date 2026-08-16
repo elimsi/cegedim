@@ -100,17 +100,17 @@ services:
     networks:
       - cetip-network
     healthcheck:
-      test: ["CMD-SHELL", "curl --silent --fail http://localhost:3000/health || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   dbt-runner:
-    image: ghcr.io/dbt-labs/dbt-postgres:1.8.latest
+    build:
+      context: ./dbt
+      dockerfile: Dockerfile
     container_name: cetip-dbt
-    restart: "no"
-    working_dir: /usr/app
-    command: ["dbt", "run", "--profiles-dir", "/usr/app", "--project-dir", "/usr/app"]
+    restart: unless-stopped
     volumes:
       - ./dbt:/usr/app
     environment:
@@ -123,10 +123,6 @@ services:
         condition: service_healthy
     networks:
       - cetip-network
-    # dbt-runner is invoked on-demand by n8n via HTTP; a simple REST wrapper is needed.
-    # For demo purposes, use a lightweight dbt HTTP wrapper:
-    entrypoint: ["/bin/sh", "-c",
-      "pip install flask && python -c \"from flask import Flask, jsonify; import subprocess; app = Flask(__name__);\n@app.route('/run', methods=['POST'])\ndef run():\n    res = subprocess.run(['dbt','run','--profiles-dir','/usr/app','--project-dir','/usr/app'], capture_output=True, text=True)\n    return jsonify({'stdout': res.stdout, 'code': res.returncode})\napp.run(host='0.0.0.0', port=8080)\""]
     ports:
       - "8080:8080"
 
@@ -140,6 +136,25 @@ services:
     ports:
       - "5050:80"
     depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - cetip-network
+
+  streamlit:
+    build:
+      context: ./streamlit
+      dockerfile: Dockerfile
+    container_name: cetip-streamlit
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cetip}:${POSTGRES_PASSWORD:-cetip2026}@postgres:5432/${POSTGRES_DB:-cetip_db}
+      FASTAPI_URL: http://fastapi:8000
+    depends_on:
+      fastapi:
+        condition: service_started
       postgres:
         condition: service_healthy
     networks:

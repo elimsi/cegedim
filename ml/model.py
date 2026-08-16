@@ -62,7 +62,16 @@ class AnomalyDetector:
             }
             
         # 3. Isolation Forest on all 5 features for nuanced pattern detection
-        self.train(historique)
+        import joblib
+        import os
+        model_path = "isolation_forest.joblib"
+        
+        # Load model if exists (simulating production serialization)
+        if os.path.exists(model_path):
+            self.model = joblib.load(model_path)
+        else:
+            self.train(historique)
+            joblib.dump(self.model, model_path)
         
         montant_par_acte = montant / nb_actes if nb_actes > 0 else montant
         frequence = len(historique)
@@ -82,10 +91,10 @@ class AnomalyDetector:
         
         prediction = self.model.predict(test_df)[0]  # 1 (normal) or -1 (anomaly)
         
-        # score_samples returns negative anomaly score. The lower, the more abnormal.
-        raw_score = self.model.score_samples(test_df)[0]
-        # Normalize for dashboard (0.0 to 1.0 where 1.0 is highly anomalous)
-        normalized_score = min(1.0, max(0.0, abs(raw_score))) 
+        # Normalize decision_function for dashboard (0.0 to 1.0 where 1.0 is highly anomalous)
+        # decision < 0 is anomaly. 
+        decision = self.model.decision_function(test_df)[0]
+        normalized_score = max(0.0, min(1.0, 0.5 - decision)) 
         
         flag = "ANOMALIE" if prediction == -1 else "NORMAL"
         
