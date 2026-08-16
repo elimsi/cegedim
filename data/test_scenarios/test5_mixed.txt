@@ -1,0 +1,11 @@
+| VIREMENTS  COMPTE EMETTEUR : CC123456 FR98765432109876543210987 LE 05/08/2026 |
+| MAIL EMETTEUR : cetip-emetteur@cegedim.com |
++-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| N°PS | EMAIL | BIC | IBAN | INTITULE | MONTANT | DATE_VIR | NUMVIR | CODE_ACTE | SPECIALITE | REGION | DATE_SOIN | NB_ACTES |
++-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| 111111111 | medecin.idf@exemple.fr | BIDAXXXXXXX | FR1111111111111111111111111 | DR DUPONT GENERALISTE | 250,00 | 20260805 | 8434 | C | MEDECIN_GENERALISTE | ILE_DE_FRANCE | 20260720 | 1 |
+| 222222222 | pharma.paca@exemple.fr | BIDBXXXXXXX | FR2222222222222222222222222 | PHARMACIE DU SOLEIL | ERROR | 20260805 | 9197 | BSB | PHARMACIEN | PACA | 20260720 | 1 |
+| 333333333 | kine.aura@exemple.fr | BIDCXXXXXXX | FR3333333333333333333333333 | CABINET KINE AURA | 120,00 | 20260805 | 6563 | AMK | KINESITHERAPEUTE | AUVERGNE_RHONE_ALPES | 20260720 | 1 |
+| 444444444 | cardio.idf@exemple.fr | BIDDXXXXXXX | FR4444444444444444444444444 | DR MARTIN CARDIOLOGUE | 80000,00 | 20260805 | 3746 | CS | CARDIOLOGUE | ILE_DE_FRANCE | 20260720 | 1 |
+| 555555555 |   | BIDEXXXXXXX | FR5555555555555555555555555 | CABINET INFIRMIER BRETAGNE | 70,00 | 20260805 | 5278 | AIS | INFIRMIER | BRETAGNE | 20260720 | 1 |
++-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+

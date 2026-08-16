@@ -1,0 +1,22 @@
++-----------------------------------------------------------------------------------------------------------------------------------------------+
+| VIREMENTS  COMPTE EMETTEUR  : CC517032    FR7630004000010000000000999                                                LE 05/08/2026 PAGE :   1 |
+| MAIL EMETTEUR : finance.cetip@cegedim.com                                                                                                       |
++------------------+---------------------+-------------+-----------------------------+-------------------------+------------+----------+--------+
+| N° PROF DE SANTE |        @MAIL        |     BIC     |             IBAN            |   INTITULE DU COMPTE    |  MONTANT   | DATE VIR | NUMVIR |
++------------------+---------------------+-------------+-----------------------------+-------------------------+------------+----------+--------+
+|        133333333 | nadia.bernard@medecin.fr | SQGHFRPPXXX | FR763000400030000000000000003 | MEDECIN GENERALISTE BER |    2094,42 | 20260801 |    101 |
+|        133333333 | nadia.bernard@medecin.fr | SQGHFRPPXXX | FR763000400030000000000000003 | MEDECIN GENERALISTE BER |     479,65 | 20260730 |    102 |
+|        100000000 | marie.moreau@medecin.fr | VGMHFRPPXXX | FR763000400000000000000000000 | OPHTALMOLOGISTE MOREAU  |     552,35 | 20260729 |    103 |
+|        111111111 | pierre.moreau@medecin.fr | UQXYFRPPXXX | FR763000400010000000000000001 | PHARMACIE MOREAU        |    1972,70 | 01/08/26 |    104 |
+|        133333333 | nadia.bernard@medecin.fr | SQGHFRPPXXX | FR763000400030000000000000003 | MEDECIN GENERALISTE BER |    1613,59 | 20260730 |    105 |
+|        100000000 | marie.moreau@medecin.fr | VGMHFRPPXXX | FR763000400000000000000000000 | OPHTALMOLOGISTE MOREAU  |     843,36 | 20260728 |    106 |
+|        100000000 | marie.moreau@medecin.fr | VGMHFRPPXXX | FR763000400000000000000000000 | OPHTALMOLOGISTE MOREAU  |    4270,42 | 20260727 |    107 |
+|        100000000 | marie.moreau@medecin.fr | VGMHFRPPXXX | FR763000400000000000000000000 | OPHTALMOLOGISTE MOREAU  |     155,59 | 20260728 |    108 |
+|        144444444 | claire.petit@medecin.fr | YPYJFRPPXXX | FR763000400040000000000000004 | CARDIOLOGUE PETIT       |    3401,68 | 20260801 |    109 |
+|        122222222 | alain.moreau@medecin.fr | SKEEFRPPXXX | FR763000400020000000000000002 | CARDIOLOGUE MOREAU      |    3300,39 | 20260802 |    110 |
+|        100000000 | bad-email-address@  | VGMHFRPPXXX | FR763000400000000000000000000 | OPHTALMOLOGISTE MOREAU  |    2367,05 | 20260801 |    111 |
+|        133333333 | nadia.bernard@medecin.fr | SQGHFRPPXXX | FR763000400030000000000000003 | MEDECIN GENERALISTE BER |    2980,46 | 20260728 |    112 |
+|        144444444 | claire.petit@medecin.fr | YPYJFRPPXXX | FR763000400040000000000000004 | CARDIOLOGUE PETIT       |     717,13 | 20260801 |    113 |
+|        133333333 | nadia.bernard@medecin.fr | SQGHFRPPXXX | FR763000400030000000000000003 | MEDECIN GENERALISTE BER |    123.456 | 20260728 |    114 |
+|        144444444 | claire.petit@medecin.fr | YPYJFRPPXXX | FR763000400040000000000000004 | CARDIOLOGUE PETIT       |    3274,60 | 20260730 |    115 |
++------------------+---------------------+-------------+-----------------------------+-------------------------+------------+----------+--------+

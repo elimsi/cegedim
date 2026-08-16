@@ -1,0 +1,17 @@
++-----------------------------------------------------------------------------------------------------------------------------------------------+
+| VIREMENTS  COMPTE EMETTEUR  : CC123456   FR123456789                                                         LE 05/08/2026 PAGE :   1 |
+| MAIL EMETTEUR : EMETTEUR@gmail.com                                                                                             |
++------------------+---------------------+-------------+-----------------------------+-------------------------+------------+----------+--------+
+| N° PROF DE SANTE |        @MAIL        |     BIC     |             IBAN            |   INTITULE DU COMPTE    |  MONTANT   | DATE VIR | NUMVIR |
++------------------+---------------------+-------------+-----------------------------+-------------------------+------------+----------+--------+
+|        444444444 | P4@gmail.com        | BDDDDDDDDDD | FRDDDDDDDDDDDDDDDDDDDDDDDDD | MEDECIN GENERALISTE4    |  123456,00 | 20260805 |     56 |
+|        111111111 | notanemail          | BDAAAAAAAAA | FRAAAAAAAAAAAAAAAAAAAAAAAAA | MEDECIN GENERALISTE1    |     256,00 | 20260808 |    100 |
+|        333333333 | P3@gmail.com        | BDCCCCCCCCC | FRCCCCCCCCCCCCCCCCCCCCCCCCC | MEDECIN GENERALISTE3    |   13456,13 | 20260809 |    750 |
+|        222222222 | P2@gmail.com        | BDBBBBBBBBB | FRBBBBBBBBBBBBBBBBBBBBBBBBB | MEDECIN GENERALISTE2    |    2256,00 | 20260810 |     88 |
+|        111111111 | P1@gmail.com        | BDAAAAAAAAA | FRAAAAAAAAAAAAAAAAAAAAAAAAA | MEDECIN GENERALISTE1    |      56,00 | 20260808 |    100 |
+|        111111111 | P1@gmail.com        | BDAAAAAAAAA | FRAAAAAAAAAAAAAAAAAAAAAAAAA | MEDECIN GENERALISTE1    |    5556,18 | 20260808 |    100 |
+|        333333333 | P3@gmail.com        | BDCCCCCCCCC | FRCCCCCCCCCCCCCCCCCCCCCCCCC | MEDECIN GENERALISTE3    |     123,00 | 20260809 |    750 |
+|        111111111 | P1@gmail.com        | BDAAAAAAAAA | FRAAAAAAAAAAAAAAAAAAAAAAAAA | MEDECIN GENERALISTE1    |   19456,00 | 20260808 |    100 |
+|        444444444 | P4@gmail.com        | BDDDDDDDDDD | FRDDDDDDDDDDDDDDDDDDDDDDDDD | MEDECIN GENERALISTE4    |   88456,00 | 20260805 |     56 |
+|        222222222 | P2@gmail.com        | BDBBBBBBBBB | FRBBBBBBBBBBBBBBBBBBBBBBBBB | MEDECIN GENERALISTE2    |     456,00 | 20260810 |     88 |
++------------------+---------------------+-------------+-----------------------------+-------------------------+------------+----------+--------+

@@ -1,0 +1,29 @@
+name: 'cetip_medallion'
+version: '1.0.0'
+config-version: 2
+
+profile: 'cetip_medallion'
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+analysis-paths: ["analyses"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  cetip_medallion:
+    bronze:
+      +schema: public
+      +materialized: table
+    silver:
+      +schema: silver
+      +materialized: table
+    gold:
+      +schema: gold
+      +materialized: table

@@ -1,0 +1,7 @@
+# CETIP Bordereau Workflow — Combined Requirements
+# For separate installation, use:
+#   pip install -r requirements-ml.txt        (FastAPI ML service)
+#   pip install -r requirements-streamlit.txt  (Streamlit dashboard)
+
+-r requirements-ml.txt
+-r requirements-streamlit.txt

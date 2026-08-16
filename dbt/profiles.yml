@@ -1,0 +1,12 @@
+cetip_medallion:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('POSTGRES_HOST', 'postgres') }}"
+      port: 5432
+      user: "{{ env_var('POSTGRES_USER', 'cetip') }}"
+      pass: "{{ env_var('POSTGRES_PASSWORD', 'cetip2026') }}"
+      dbname: "{{ env_var('POSTGRES_DB', 'cetip_db') }}"
+      schema: public
+      threads: 4

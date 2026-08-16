@@ -1,0 +1,600 @@
+{
+  "name": "CETIP - V3 Pipeline Enterprise (LLM + Medallion)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/5 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "d74b5c89-5b5e-4b31-aaf4-f0850526756c",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1840,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, nom_fichier, contenu FROM bordereaux_inbox WHERE statut = 'EN_ATTENTE' LIMIT 2;",
+        "options": {}
+      },
+      "id": "a65f2d5f-6c36-4f26-8a45-e4f98945633f",
+      "name": "Fetch Pending Files",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -1616,
+        528
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "BMQyCIaJBl9rZyo8",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $items().length }}",
+              "operation": "larger"
+            }
+          ]
+        }
+      },
+      "id": "019b7433-c208-4096-94ad-1f01953e83f7",
+      "name": "Files Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -1392,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "if (!items || items.length === 0) return [];\nlet mergedContent = '';\nconst ids = [];\nfor (const item of items) {\n  mergedContent += item.json.contenu + '\\n';\n  ids.push(item.json.id);\n}\nreturn [{ json: {\n  fileContent: mergedContent,\n  fileName: 'batch_db_' + ids.join('_') + '.ok',\n  db_ids: ids\n}}];"
+      },
+      "id": "304d482f-565b-460d-8cbb-9959e3c6db1f",
+      "name": "Merge Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1168,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "console.log(\"Starting Pre-Parser node...\");\n\nconst inputJson = items[0].json;\nconst fileContent = inputJson.fileContent || inputJson.contenu;\n\nif (!fileContent) {\n    console.log(\"Error: No file content provided\");\n    return [{ json: { error: \"No file content\" } }];\n}\n\nconst lines = fileContent.split('\\n');\nconst rows_parsed = [];\n\nfor (let line of lines) {\n    line = line.trim();\n    const cols = line.split('|').map(c => c.trim());\n    \n    if (cols.length >= 14 && cols[1].match(/^\\d{9}$/)) {\n        rows_parsed.push({\n            num_ps: cols[1],\n            email: cols[2],\n            bic: cols[3],\n            iban: cols[4],\n            intitule: cols[5],\n            montant: cols[6],\n            date_vir: cols[7],\n            numvir: cols[8],\n            code_acte: cols[9],\n            specialite: cols[10],\n            region: cols[11],\n            date_soin: cols[12],\n            nb_actes: cols[13]\n        });\n    }\n}\n\nconsole.log(`Parsed ${rows_parsed.length} rows.`);\n\nreturn [{\n    json: {\n        fichier_source: inputJson.fileName || inputJson.nom_fichier || \"inconnu\",\n        rows_parsed: rows_parsed,\n        db_ids: inputJson.db_ids || []\n    }\n}];"
+      },
+      "id": "f02790cd-7439-4e3b-b533-cdd6e4999c74",
+      "name": "Pre-Parser",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -944,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.GROQ_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  JSON.stringify({\n    \"model\": \"llama-3.1-8b-instant\",\n    \"response_format\": { \"type\": \"json_object\" },\n    \"messages\": [\n      {\n        \"role\": \"system\",\n        \"content\": \"Tu es un expert en validation de bordereaux de virements pour CETIP (Cegedim). Analyse les lignes JSON fournies et retourne STRICTEMENT un objet JSON contenant une clé 'decisions' qui est un tableau d'objets. Pour chaque ligne, l'objet doit contenir :\\n- is_valid: true/false (false si anomalie majeure)\\n- anomalie_semantique: description courte ou null\\n- correction_suggeree: suggestion ou null\\n- raison_rejet: code erreur ou null\\n\\nRéponds UNIQUEMENT avec le JSON valide, sans markdown.\"\n      },\n      {\n        \"role\": \"user\",\n        \"content\": JSON.stringify($json[\"rows_parsed\"])\n      }\n    ]\n  })\n}}",
+        "options": {}
+      },
+      "id": "d98779a3-a3ce-4a58-a229-78e250a9c0d7",
+      "name": "LLM Semantic Validator (Mistral)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -720,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// src/post_llm_validator.js\n// CETIP - Phase 3: Post-LLM Guard-Rail Validator\n// Receives the LLM JSON response, parses decisions, and applies a deterministic fallback.\n// The LLM provides semantic understanding; this code enforces structural safety.\n\nconsole.log(\"[PostLLMValidator] Starting guard-rail validation...\");\n\nconst inputData = items[0].json;\n\n// --- 1. Parse LLM Response ---\nlet llm_decisions = [];\n\ntry {\n    // The LLM HTTP response body is in items[0].json (n8n HTTP Request node output)\n    // We expect an array of objects matching rows_parsed\n    const llmBody = inputData.body || inputData;\n    \n    // Try to extract JSON from the LLM's response (it may wrap it in markdown ```json blocks)\n    let rawText = \"\";\n    if (llmBody.choices && llmBody.choices[0]) {\n        rawText = llmBody.choices[0].message.content;\n    } else if (typeof llmBody === \"string\") {\n        rawText = llmBody;\n    } else if (llmBody.outputs) {\n        rawText = llmBody.outputs[0].text || \"\";\n    }\n\n    // Strip markdown code fences if present\n    const jsonMatch = rawText.match(/```(?:json)?\\s*([\\s\\S]*?)```/) || [null, rawText];\n    const parsed = JSON.parse(jsonMatch[1].trim()); llm_decisions = parsed.decisions || parsed;\n    console.log(`[PostLLMValidator] LLM returned ${llm_decisions.length} decisions.`);\n} catch (e) {\n    console.log(`[PostLLMValidator] WARNING: Failed to parse LLM response (${e.message}). Falling back to deterministic validation.`);\n    llm_decisions = [];\n}\n\n// --- 2. Deterministic Fallback Regex (safety net if LLM fails/hallucinates) ---\nconst REGEX = {\n    montant: /^\\d{1,6},\\d{2}$/,\n    date_vir: /^\\d{8}$/,\n    date_soin: /^\\d{8}$/,\n    email: /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/,\n    num_ps: /^\\d+$/,\n    numvir: /^\\d+$/,\n    nb_actes: /^\\d+$/\n};\nconst VALID_CODE_ACTE = ['C', 'CS', 'V', 'AIS', 'AMK', 'AMI', 'BSB'];\n\n// Retrieve the original rows from the pre-parser \nlet rows_parsed = [];\ntry {\n    // CORRECTION ICI : Utilisation de .first() pour s'assurer que n8n trouve bien les données\n    rows_parsed = $('Pre-Parser').first().json.rows_parsed || [];\n} catch(e) {\n    console.log(\"[PostLLMValidator] Could not access Pre-Parser data via $() shorthand. Using fallback.\");\n    rows_parsed = inputData.rows_parsed || [];\n}\n\nconst meta = {\n    email_emetteur: inputData.email_emetteur || \"unknown@cetip.fr\",\n    date_fichier: inputData.date_fichier || \"INCONNU\",\n    fichier_source: inputData.fichier_source || \"unknown\",\n    db_ids: inputData.db_ids || []\n};\n\n// --- 3. Apply decisions row by row ---\nconst rows_valides = [];\nconst rows_rejetees = [];\nconst psRejetMap = {};\n\nfor (let i = 0; i < rows_parsed.length; i++) {\n    const row = rows_parsed[i];\n    const ps = row.num_ps;\n    const llm = llm_decisions[i] || {};\n\n    // Contagion: if PS already rejected, reject all its lines\n    if (psRejetMap[ps]) {\n        row.raison_rejet = psRejetMap[ps];\n        row.llm_decision = \"CONTAGION\";\n        rows_rejetees.push(row);\n        continue;\n    }\n\n    let raison = null;\n    let anomalie_semantique = llm.anomalie_semantique || null;\n\n    // A. If LLM says invalid, trust it\n    if (llm.is_valid === false) {\n        raison = llm.raison_rejet || \"REJET_LLM\";\n    }\n\n    // B. Deterministic fallback (always run as safety net)\n    if (!raison) {\n        const required = ['num_ps','email','bic','iban','intitule','montant','date_vir','numvir','code_acte','specialite','region','date_soin','nb_actes'];\n        for (const f of required) {\n            if (!row[f] || row[f].trim() === \"\") { raison = `CHAMP_MANQUANT_${f.toUpperCase()}`; break; }\n        }\n    }\n    if (!raison && !REGEX.montant.test(row.montant)) raison = \"FORMAT_MONTANT\";\n    if (!raison && !REGEX.email.test(row.email)) raison = \"FORMAT_EMAIL\";\n    if (!raison && !REGEX.num_ps.test(row.num_ps)) raison = \"FORMAT_NUM_PS\";\n    if (!raison && !REGEX.date_vir.test(row.date_vir)) raison = \"FORMAT_DATE_VIR\";\n    if (!raison && !REGEX.date_soin.test(row.date_soin)) raison = \"FORMAT_DATE_SOIN\";\n    if (!raison && !VALID_CODE_ACTE.includes(row.code_acte)) raison = \"CODE_ACTE_INVALIDE\";\n\n    if (raison) {\n        psRejetMap[ps] = raison;\n        row.raison_rejet = raison;\n        row.llm_decision = llm.is_valid === false ? \"LLM_REJECT\" : \"REGEX_REJECT\";\n        rows_rejetees.push(row);\n    } else {\n        // Valid row — attach LLM enrichments\n        row.anomalie_semantique = anomalie_semantique;\n        row.correction_suggeree = llm.correction_suggeree || null;\n        row.llm_decision = \"VALID\";\n        rows_valides.push(row);\n    }\n}\n\nconst ps_valides = [...new Set(rows_valides.map(r => r.num_ps))];\nconst ps_rejetes = Object.keys(psRejetMap);\n\nconsole.log(`[PostLLMValidator] Validation complete:`);\nconsole.log(`  - ${rows_valides.length} valid rows (${ps_valides.length} PS)`);\nconsole.log(`  - ${rows_rejetees.length} rejected rows (${ps_rejetes.length} PS)`);\nconsole.log(`  - ${rows_valides.filter(r => r.anomalie_semantique).length} semantic anomalies flagged by LLM`);\n\nreturn [{\n    json: {\n        rows_valides,\n        rows_rejetees,\n        ps_valides,\n        ps_rejetes,\n        nb_lignes_valides: rows_valides.length,\n        nb_lignes_rejetees: rows_rejetees.length,\n        has_rejets: rows_rejetees.length > 0,\n        ...meta\n    }\n}];\n"
+      },
+      "id": "108d45f5-151a-4d6c-9171-4756c05af8c7",
+      "name": "Post-LLM Validator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -496,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.has_rejets }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "d717b7ae-27bf-4b4f-a9a6-92a10ed03fed",
+      "name": "Has Rejections?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -272,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// src/rejet_builder.js\n// n8n Code Node for building the CSV of rejected rows\n\nconsole.log(\"Starting rejet_builder node...\");\n\nif (!items || !items.length || !items[0].json) {\n    console.log(\"Error: No input data provided\");\n    return [{ json: { error: \"No input data\" } }];\n}\n\n// Read rows_rejetees from input\nconst rows_rejetees = items[0].json.rows_rejetees || [];\n\n// The 13 Enriched Columns + RAISON_REJET\nconst headers = [\n    \"NUM_PS\", \"EMAIL\", \"BIC\", \"IBAN\", \"INTITULE\", \"MONTANT\", \"DATE_VIR\",\n    \"NUMVIR\", \"CODE_ACTE\", \"SPECIALITE\", \"REGION\", \"DATE_SOIN\",\n    \"NB_ACTES\", \"RAISON_REJET\"\n];\n\n// Helper to escape fields for proper CSV format\nfunction escapeCSV(field) {\n    if (field === null || field === undefined) return \"\";\n    const str = String(field);\n    // If field contains comma, quote, or newline, wrap in quotes and escape quotes\n    if (str.includes(\",\") || str.includes(\"\\\"\") || str.includes(\"\\n\")) {\n        return `\"${str.replace(/\"/g, '\"\"')}\"`;\n    }\n    return str;\n}\n\nconst csvLines = [];\n\n// 1. Add header\ncsvLines.push(headers.join(\",\"));\n\n// 2. Add data rows\nfor (const row of rows_rejetees) {\n    const line = [\n        escapeCSV(row.num_ps),\n        escapeCSV(row.email),\n        escapeCSV(row.bic),\n        escapeCSV(row.iban),\n        escapeCSV(row.intitule),\n        escapeCSV(row.montant),\n        escapeCSV(row.date_vir),\n        escapeCSV(row.numvir),\n        escapeCSV(row.code_acte),\n        escapeCSV(row.specialite),\n        escapeCSV(row.region),\n        escapeCSV(row.date_soin),\n        escapeCSV(row.nb_actes),\n        escapeCSV(row.raison_rejet) // The reason from validators.js\n    ];\n    csvLines.push(line.join(\",\"));\n}\n\n// 3. Add summary row at the end\ncsvLines.push(`TOTAL_REJETS,${rows_rejetees.length}`);\n\n// Combine into single text body\nconst csv_content = csvLines.join(\"\\n\");\n\nconsole.log(`Generated CSV with ${rows_rejetees.length} rejected rows.`);\n\nreturn [{\n    json: {\n        csv_content: csv_content,\n        nb_rejets: rows_rejetees.length\n    }\n}];\n"
+      },
+      "id": "0148572c-52c0-45c3-b834-9030fb5047f9",
+      "name": "Rejet Builder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -48,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "cetip@cegedim.com",
+        "toEmail": "={{ $('Post-LLM Validator').first().json.email_emetteur }}",
+        "subject": "=Rapport d'anomalies CETIP",
+        "text": "Anomalies detectees. Voir piece jointe.",
+        "options": {}
+      },
+      "id": "7dd76d1d-9e45-46af-9ed3-38a2d2f8a461",
+      "name": "Email Emetteur",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [
+        176,
+        432
+      ],
+      "webhookId": "70f56c99-5358-4dba-b75a-31553f5bc6b6",
+      "credentials": {
+        "smtp": {
+          "id": "mAjJ1xSvzakHf7na",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// src/grouper.js\n// n8n Code Node for grouping valid Bordereau rows by Professionnel de Santé (PS)\n\nconsole.log(\"Starting grouper node...\");\n\nif (!items || !items.length || !items[0].json || !items[0].json.rows_valides) {\n    console.log(\"Error: No valid rows provided from validators\");\n    return [{ json: { error: \"No valid rows\" } }];\n}\n\nconst rowsValides = items[0].json.rows_valides;\nconst psGroups = {};\n\nconsole.log(`Processing ${rowsValides.length} valid rows for grouping.`);\n\nfor (let i = 0; i < rowsValides.length; i++) {\n    const row = rowsValides[i];\n    const ps = row.num_ps;\n\n    // Initialize group if it doesn't exist\n    if (!psGroups[ps]) {\n        psGroups[ps] = {\n            num_ps: ps,\n            email: row.email,\n            intitule: row.intitule,\n            specialite: row.specialite,\n            region: row.region,\n            bic: row.bic,\n            iban: row.iban,\n            lignes: [],\n            montant_total: 0,\n            nb_actes_total: 0,\n            codes_actes_set: new Set()\n        };\n    }\n\n    // Add row to group's lines — with derived montant_par_acte per line (Issue 8: ML needs per-line value)\n    const montantParsed = parseFloat(row.montant.replace(',', '.'));\n    const nbActesParsed = parseInt(row.nb_actes, 10);\n    const montantParActe = nbActesParsed > 0 ? Math.round((montantParsed / nbActesParsed) * 100) / 100 : montantParsed;\n    \n    row.montant_par_acte = montantParActe;\n    psGroups[ps].lignes.push(row);\n    \n    // Accumulate group totals\n    psGroups[ps].montant_total += montantParsed;\n    psGroups[ps].nb_actes_total += nbActesParsed;\n    \n    // Track unique code_acte\n    if (row.code_acte) {\n        psGroups[ps].codes_actes_set.add(row.code_acte);\n    }\n}\n\nconst resultItems = [];\n\nfor (const ps in psGroups) {\n    const group = psGroups[ps];\n    \n    // Fix JS floating point precision issues (e.g. 25324.180000000004 -> 25324.18)\n    const montantTotalRounded = Math.round(group.montant_total * 100) / 100;\n    \n    // Calculate average amount per act\n    let montantMoyenParActe = 0;\n    if (group.nb_actes_total > 0) {\n        montantMoyenParActe = Math.round((montantTotalRounded / group.nb_actes_total) * 100) / 100;\n    }\n\n    resultItems.push({\n        json: {\n            num_ps: group.num_ps,\n            email: group.email,\n            intitule: group.intitule,\n            specialite: group.specialite,\n            region: group.region,\n            bic: group.bic,\n            iban: group.iban,\n            montant_total: montantTotalRounded,\n            nb_actes_total: group.nb_actes_total,\n            montant_moyen_par_acte: montantMoyenParActe,\n            nb_lignes: group.lignes.length,\n            codes_actes_uniques: Array.from(group.codes_actes_set),\n            lignes: group.lignes\n        }\n    });\n}\n\nconsole.log(`Grouped into ${resultItems.length} unique PS items.`);\n\n// Return one item per PS. This feeds directly into n8n's Split In Batches node perfectly.\nreturn resultItems;\n"
+      },
+      "id": "d2d7a1f3-06fd-456d-8de5-25bfbc3888bd",
+      "name": "Grouper",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -48,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "78011898-2f6c-442d-ab1e-6d9945109ae8",
+      "name": "SplitInBatches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        176,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://fastapi:8000/predict-anomaly",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"num_ps\": \"{{ $json.num_ps }}\",\n  \"email\": \"{{ $json.email }}\",\n  \"intitule\": \"{{ $json.intitule }}\",\n  \"specialite\": \"{{ $json.specialite }}\",\n  \"region\": \"{{ $json.region }}\",\n  \"bic\": \"{{ $json.bic }}\",\n  \"iban\": \"{{ $json.iban }}\",\n  \"montant\": {{ $json.montant_total }},\n  \"nb_actes\": {{ $json.nb_actes_total }},\n  \"montant_par_acte\": {{ $json.montant_moyen_par_acte }}\n}",
+        "options": {}
+      },
+      "id": "58a42d1f-4fec-43d3-996c-02fc9deb354a",
+      "name": "FastAPI ML (Isolation Forest)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        400,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Inject ML results and HTML template\nvar ps = $('SplitInBatches').first().json;\nvar ml = items[0].json;\n\nps.flag_anomalie = ml.flag_anomalie;\nps.score_anomalie = ml.score_anomalie;\nps.template_html = `<!DOCTYPE html>\n<html lang=\"fr\">\n<head>\n    <meta charset=\"UTF-8\">\n    <title>Bordereau de Virement CETIP</title>\n    <style>\n        /* A4 Format & Print Optimization */\n        @page {\n            size: A4;\n            margin: 20mm;\n            @bottom-center {\n                content: \"Document confidentiel — généré automatiquement par le système CETIP — Page \" counter(page) \" sur \" counter(pages);\n                font-family: Arial, sans-serif;\n                font-size: 9px;\n                color: #777777;\n            }\n        }\n        \n        body {\n            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;\n            font-size: 12px;\n            line-height: 1.6;\n            color: #333333;\n            margin: 0;\n            padding: 0;\n            -webkit-print-color-adjust: exact;\n            print-color-adjust: exact;\n        }\n\n        /* Header Styling */\n        .header {\n            border-bottom: 3px solid #003366;\n            padding-bottom: 10px;\n            margin-bottom: 25px;\n            display: flex;\n            justify-content: space-between;\n            align-items: flex-end;\n        }\n        \n        .header h1 {\n            color: #003366;\n            margin: 0;\n            font-size: 22px;\n            font-weight: 700;\n            text-transform: uppercase;\n            letter-spacing: 1px;\n        }\n        \n        .header .date {\n            color: #555555;\n            font-size: 12px;\n            font-weight: bold;\n        }\n\n        /* Identity Box Styling */\n        .identity-box {\n            background-color: #f4f7fa;\n            border-left: 5px solid #003366;\n            padding: 15px 20px;\n            margin-bottom: 35px;\n            border-radius: 0 4px 4px 0;\n        }\n        \n        .identity-box h2 {\n            margin: 0 0 12px 0;\n            font-size: 14px;\n            color: #003366;\n            text-transform: uppercase;\n        }\n        \n        .identity-grid {\n            display: table;\n            width: 100%;\n        }\n        \n        .identity-row {\n            display: table-row;\n        }\n        \n        .identity-label {\n            display: table-cell;\n            font-weight: bold;\n            color: #555555;\n            width: 120px;\n            padding: 4px 0;\n        }\n        \n        .identity-value {\n            display: table-cell;\n            color: #222222;\n            font-weight: 500;\n        }\n\n        /* Data Table Styling */\n        table {\n            width: 100%;\n            border-collapse: collapse;\n            margin-bottom: 30px;\n        }\n        \n        th {\n            background-color: #003366;\n            color: #ffffff;\n            font-weight: 600;\n            padding: 12px 10px;\n            text-align: left;\n            font-size: 11px;\n            text-transform: uppercase;\n        }\n        \n        td {\n            padding: 10px;\n            border-bottom: 1px solid #eeeeee;\n            font-size: 12px;\n        }\n        \n        tbody tr:nth-child(even) {\n            background-color: #f9fbfd;\n        }\n        \n        .text-right {\n            text-align: right;\n        }\n        \n        .text-center {\n            text-align: center;\n        }\n        \n        /* Total Row Styling */\n        .total-row {\n            background-color: #e8eef3;\n        }\n        \n        .total-row td {\n            font-weight: bold;\n            font-size: 13px;\n            color: #003366;\n            border-top: 2px solid #003366;\n            border-bottom: 2px solid #003366;\n            padding: 15px 10px;\n        }\n\n        /* Fallback footer for browsers not supporting @page bottom-center */\n        .footer-static {\n            margin-top: 40px;\n            text-align: center;\n            font-size: 10px;\n            color: #888888;\n            border-top: 1px solid #eeeeee;\n            padding-top: 10px;\n        }\n    </style>\n</head>\n<body>\n\n    <div class=\"header\">\n        <h1>CETIP — Bordereau de Virement</h1>\n        <div class=\"date\">Généré le : {{date_generation}}</div>\n    </div>\n\n    <div class=\"identity-box\">\n        <h2>Informations du Professionnel de Santé</h2>\n        <div class=\"identity-grid\">\n            <div class=\"identity-row\">\n                <div class=\"identity-label\">Intitulé :</div>\n                <div class=\"identity-value\">{{intitule}}</div>\n            </div>\n            <div class=\"identity-row\">\n                <div class=\"identity-label\">N° PS :</div>\n                <div class=\"identity-value\">{{num_ps}}</div>\n            </div>\n            <div class=\"identity-row\">\n                <div class=\"identity-label\">Spécialité :</div>\n                <div class=\"identity-value\">{{specialite}}</div>\n            </div>\n            <div class=\"identity-row\">\n                <div class=\"identity-label\">Région :</div>\n                <div class=\"identity-value\">{{region}}</div>\n            </div>\n        </div>\n    </div>\n\n    <table>\n        <thead>\n            <tr>\n                <th>N° Virement</th>\n                <th>Code Acte</th>\n                <th>Date de Soin</th>\n                <th class=\"text-center\">Nb Actes</th>\n                <th class=\"text-right\">Montant</th>\n            </tr>\n        </thead>\n        <tbody>\n            <!-- Handlebars Loop starts here -->\n            {{#each lignes}}\n            <tr>\n                <td>{{numvir}}</td>\n                <td>{{code_acte}}</td>\n                <td>{{date_soin}}</td>\n                <td class=\"text-center\">{{nb_actes}}</td>\n                <td class=\"text-right\">{{montant}} €</td>\n            </tr>\n            {{/each}}\n            <!-- Handlebars Loop ends here -->\n            \n            <tr class=\"total-row\">\n                <td colspan=\"3\" class=\"text-right\">TOTAL</td>\n                <td class=\"text-center\">{{nb_actes_total}}</td>\n                <td class=\"text-right\">{{montant_total}} €</td>\n            </tr>\n        </tbody>\n    </table>\n\n    <div class=\"footer-static\">\n        Document confidentiel — généré automatiquement par le système CETIP\n        <!-- Gotenberg automatically handles standard page numbers if injected via a footer.html, \n             otherwise @page handles it in pure CSS contexts -->\n    </div>\n\n</body>\n</html>\n`;\nitems[0].json = ps;\n\n// src/template_filler.js\n// n8n Code Node — Replaces {{placeholders}} in pdf_template.html with real PS data.\n// This node runs BETWEEN the Grouper output and the Gotenberg HTTP Request.\n// Input: one item per PS from SplitInBatches (output of grouper.js)\n\nconsole.log(\"Starting template_filler node...\");\n\nvar ps = items[0].json;\n\n// Read the HTML template from the mounted volume or from a stored string\n// In n8n, this would be loaded via a Read File node or stored as a static string.\n// For this Code node, we assume the template HTML is passed in as ps.template_html\n// or we reconstruct it inline. In practice, use a \"Read Binary File\" node before this one.\n\nlet html = ps.template_html || '';\n\nif (!html) {\n    console.log(\"Warning: No template_html provided. Using fallback inline template.\");\n    // The n8n workflow should pipe the template via a Read File node.\n    // This is a safety fallback.\n    return [{ json: { error: \"template_html not provided in input\" } }];\n}\n\n// Format montant_total as \"XX XXX,XX\" (French financial format)\nfunction formatMontant(num) {\n    if (num === null || num === undefined) return '0,00';\n    const parts = Number(num).toFixed(2).split('.');\n    const intPart = parts[0].replace(/\\B(?=(\\d{3})+(?!\\d))/g, ' ');\n    return intPart + ',' + parts[1];\n}\n\n// Format date_generation\nconst now = new Date();\nconst dateGeneration = now.toLocaleDateString('fr-FR', {\n    day: '2-digit', month: '2-digit', year: 'numeric',\n    hour: '2-digit', minute: '2-digit'\n});\n\n// Replace simple placeholders\nhtml = html.replace(/\\{\\{intitule\\}\\}/g, ps.intitule || '');\nhtml = html.replace(/\\{\\{num_ps\\}\\}/g, ps.num_ps || '');\nhtml = html.replace(/\\{\\{specialite\\}\\}/g, ps.specialite || '');\nhtml = html.replace(/\\{\\{region\\}\\}/g, ps.region || '');\nhtml = html.replace(/\\{\\{montant_total\\}\\}/g, formatMontant(ps.montant_total));\nhtml = html.replace(/\\{\\{nb_actes_total\\}\\}/g, String(ps.nb_actes_total || 0));\nhtml = html.replace(/\\{\\{date_generation\\}\\}/g, dateGeneration);\n\n// Replace {{#each lignes}} ... {{/each}} loop\nconst eachRegex = /\\{\\{#each lignes\\}\\}([\\s\\S]*?)\\{\\{\\/each\\}\\}/;\nconst match = html.match(eachRegex);\n\nif (match && ps.lignes && ps.lignes.length > 0) {\n    const rowTemplate = match[1];\n    let rowsHtml = '';\n\n    for (const ligne of ps.lignes) {\n        let row = rowTemplate;\n        row = row.replace(/\\{\\{numvir\\}\\}/g, ligne.numvir || '');\n        row = row.replace(/\\{\\{code_acte\\}\\}/g, ligne.code_acte || '');\n        row = row.replace(/\\{\\{date_soin\\}\\}/g, ligne.date_soin || '');\n        row = row.replace(/\\{\\{nb_actes\\}\\}/g, String(ligne.nb_actes || 0));\n        row = row.replace(/\\{\\{montant\\}\\}/g, ligne.montant || '0,00');\n        rowsHtml += row;\n    }\n\n    html = html.replace(eachRegex, rowsHtml);\n}\n\nconsole.log(`Template filled for PS ${ps.num_ps} (${ps.lignes ? ps.lignes.length : 0} lines).`);\n\nps.filled_html = html;\nps.filename = `bordereau_${ps.num_ps}_${now.toISOString().slice(0,10)}.pdf`;\n\nreturn [{\n    json: ps\n}];\n\n"
+      },
+      "id": "be0c63e1-07a9-42f7-a20a-876958035af9",
+      "name": "Template Filler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = items[0].json.filled_html;\nitems[0].binary = {\n  data: {\n    data: Buffer.from(html, 'utf-8').toString('base64'),\n    mimeType: 'text/html',\n    fileName: 'index.html'\n  }\n};\nreturn items;"
+      },
+      "id": "95dbf96f-9056-4ac6-b402-0b594e2c04c0",
+      "name": "Prepare Gotenberg",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        848,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://gotenberg:3000/forms/chromium/convert/html",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "files",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8a3c7a24-f894-484e-bd7a-1f7a5b269ae5",
+      "name": "Gotenberg (PDF)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1072,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "virements@cegedim.com",
+        "toEmail": "={{ $('SplitInBatches').first().json.email }}",
+        "subject": "Votre Bordereau de Virement CETIP",
+        "text": "Veuillez trouver votre bordereau de virement en piece jointe.",
+        "options": {}
+      },
+      "id": "0a4c4a45-ca45-486a-ae11-d8de94910647",
+      "name": "Email PS",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [
+        1296,
+        720
+      ],
+      "webhookId": "67b99025-b31f-4cf5-98a5-801d1e330d74",
+      "credentials": {
+        "smtp": {
+          "id": "mAjJ1xSvzakHf7na",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO bronze_bordereaux (\n    num_ps, email, intitule, specialite, region, bic, iban, \n    montant, nb_actes, code_acte, date_vir, date_soin, numvir, \n    flag_anomalie, score_anomalie, fichier_source, date_ingestion\n) \nVALUES \n{{ $('Template Filler').item.json.lignes.map(l => `('${$('Template Filler').item.json.num_ps}', '${$('Template Filler').item.json.email}', '${$('Template Filler').item.json.intitule.replace(/'/g, \"''\")}', '${$('Template Filler').item.json.specialite}', '${$('Template Filler').item.json.region}', '${$('Template Filler').item.json.bic}', '${$('Template Filler').item.json.iban}', ${parseFloat(l.montant.replace(',','.'))}, ${l.nb_actes}, '${l.code_acte}', '${l.date_vir}', '${l.date_soin}', '${l.numvir}', '${$('Template Filler').item.json.flag_anomalie}', ${$('Template Filler').item.json.score_anomalie}, '${$('Pre-Parser').first().json.fichier_source}', NOW())`).join(',') }}\nON CONFLICT DO NOTHING;\n",
+        "options": {}
+      },
+      "id": "f5a80c96-5427-49f8-8c8b-ddb17cc6446c",
+      "name": "Insert Bronze",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1520,
+        720
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "BMQyCIaJBl9rZyo8",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://dbt-runner:8080/run",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"models\": \"silver_traitements gold_fact_traitements\" }",
+        "options": {}
+      },
+      "id": "9d090ff2-16d0-4f43-9b5f-907e6c08ef1b",
+      "name": "dbt Run (Silver+Gold)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1744,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE bordereaux_inbox SET statut = 'TRAITE', date_traitement = NOW() WHERE id = ANY(ARRAY[{{ $('Pre-Parser').item.json.db_ids.join(',') }}]::int[]);",
+        "options": {}
+      },
+      "id": "efeecd3f-b991-4748-aecc-560c79d06b4b",
+      "name": "Mark Files TRAITE",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        400,
+        528
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "BMQyCIaJBl9rZyo8",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Pending Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Pending Files": {
+      "main": [
+        [
+          {
+            "node": "Files Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Files Found?": {
+      "main": [
+        [
+          {
+            "node": "Merge Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Files": {
+      "main": [
+        [
+          {
+            "node": "Pre-Parser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pre-Parser": {
+      "main": [
+        [
+          {
+            "node": "LLM Semantic Validator (Mistral)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Semantic Validator (Mistral)": {
+      "main": [
+        [
+          {
+            "node": "Post-LLM Validator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post-LLM Validator": {
+      "main": [
+        [
+          {
+            "node": "Has Rejections?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Rejections?": {
+      "main": [
+        [
+          {
+            "node": "Rejet Builder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Grouper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rejet Builder": {
+      "main": [
+        [
+          {
+            "node": "Email Emetteur",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Grouper": {
+      "main": [
+        [
+          {
+            "node": "SplitInBatches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SplitInBatches": {
+      "main": [
+        [
+          {
+            "node": "Mark Files TRAITE",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "FastAPI ML (Isolation Forest)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FastAPI ML (Isolation Forest)": {
+      "main": [
+        [
+          {
+            "node": "Template Filler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Template Filler": {
+      "main": [
+        [
+          {
+            "node": "Prepare Gotenberg",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Gotenberg": {
+      "main": [
+        [
+          {
+            "node": "Gotenberg (PDF)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gotenberg (PDF)": {
+      "main": [
+        [
+          {
+            "node": "Email PS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email PS": {
+      "main": [
+        [
+          {
+            "node": "Insert Bronze",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Bronze": {
+      "main": [
+        [
+          {
+            "node": "dbt Run (Silver+Gold)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "dbt Run (Silver+Gold)": {
+      "main": [
+        [
+          {
+            "node": "SplitInBatches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "71566881-ea2c-4351-861d-e749c32cc0c6",
+  "meta": {
+    "instanceId": "ac53cdefaa75e49aef5a54f5715a4b470bec504437724439f3b635c8ba7a82f3"
+  },
+  "nodeGroups": [],
+  "id": "FD5E8iCZcHQYijGv",
+  "tags": []
+}

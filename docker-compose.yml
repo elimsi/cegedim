@@ -1,0 +1,154 @@
+# ==============================================================================
+# CETIP Bordereau Workflow - Docker Services
+# ==============================================================================
+# Startup instructions:
+# 1. Copy .env.example to .env and configure the variables (if needed).
+#    cp .env.example .env
+# 2. Start the services in detached mode:
+#    docker compose up -d
+# 3. Access the services:
+#    - n8n:       http://localhost:5678
+#    - FastAPI:   http://localhost:8000 (ML Anomaly Detection)
+#    - pgAdmin:   http://localhost:5050 (Login with PGADMIN_EMAIL & PGADMIN_PASSWORD)
+#    - Gotenberg: API at http://localhost:3000
+# 4. To stop the services:
+#    docker compose down
+# 5. To view logs:
+#    docker compose logs -f
+# ==============================================================================
+
+name: cetip-workflow
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: cetip-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cetip}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cetip2026}
+      POSTGRES_DB: ${POSTGRES_DB:-cetip_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    networks:
+      - cetip-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cetip} -d ${POSTGRES_DB:-cetip_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  n8n:
+    image: n8nio/n8n
+    container_name: cetip-n8n
+    restart: unless-stopped
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB:-cetip_db}
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_USER=${POSTGRES_USER:-cetip}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:-cetip2026}
+      - FASTAPI_URL=http://fastapi:8000
+      - GOTENBERG_URL=http://gotenberg:3000
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-your_mistral_key_here}
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./data/input:/home/node/data/input
+      - ./data/output:/home/node/data/output
+      - ./src:/home/node/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - cetip-network
+
+  fastapi:
+    build:
+      context: ./ml
+      dockerfile: Dockerfile
+    container_name: cetip-fastapi
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cetip}:${POSTGRES_PASSWORD:-cetip2026}@postgres:5432/${POSTGRES_DB:-cetip_db}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./ml:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - cetip-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl --silent --fail http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: cetip-gotenberg
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    networks:
+      - cetip-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl --silent --fail http://localhost:3000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  dbt-runner:
+    image: ghcr.io/dbt-labs/dbt-postgres:1.8.latest
+    container_name: cetip-dbt
+    restart: "no"
+    working_dir: /usr/app
+    command: ["dbt", "run", "--profiles-dir", "/usr/app", "--project-dir", "/usr/app"]
+    volumes:
+      - ./dbt:/usr/app
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-cetip}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cetip2026}
+      POSTGRES_DB: ${POSTGRES_DB:-cetip_db}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - cetip-network
+    # dbt-runner is invoked on-demand by n8n via HTTP; a simple REST wrapper is needed.
+    # For demo purposes, use a lightweight dbt HTTP wrapper:
+    entrypoint: ["/bin/sh", "-c",
+      "pip install flask && python -c \"from flask import Flask, jsonify; import subprocess; app = Flask(__name__);\n@app.route('/run', methods=['POST'])\ndef run():\n    res = subprocess.run(['dbt','run','--profiles-dir','/usr/app','--project-dir','/usr/app'], capture_output=True, text=True)\n    return jsonify({'stdout': res.stdout, 'code': res.returncode})\napp.run(host='0.0.0.0', port=8080)\""]
+    ports:
+      - "8080:8080"
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: cetip-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@cetip.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin2026}
+    ports:
+      - "5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - cetip-network
+
+volumes:
+  postgres_data:
+  n8n_data:
+
+networks:
+  cetip-network:
+    name: cetip-network

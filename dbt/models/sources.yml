@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: public
+    database: cetip_db
+    schema: public
+    tables:
+      - name: bronze_bordereaux
+        description: "Raw ingestion layer — bordereau lines as-is from n8n"
+      - name: historical_traitements
+        description: "Historical ML training data"

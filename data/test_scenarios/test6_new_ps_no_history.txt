@@ -1,0 +1,9 @@
+| VIREMENTS  COMPTE EMETTEUR : CC123456 FR98765432109876543210987 LE 05/08/2026 |
+| MAIL EMETTEUR : cetip-emetteur@cegedim.com |
++-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| N°PS | EMAIL | BIC | IBAN | INTITULE | MONTANT | DATE_VIR | NUMVIR | CODE_ACTE | SPECIALITE | REGION | DATE_SOIN | NB_ACTES |
++-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| 111111111 | medecin.idf@exemple.fr | BIDAXXXXXXX | FR1111111111111111111111111 | DR DUPONT GENERALISTE | 250,00 | 20260805 | 8458 | C | MEDECIN_GENERALISTE | ILE_DE_FRANCE | 20260720 | 1 |
+| 666666666 | ps666666666@gmail.com | BUNKNOWNXXX | FRUNKNOWNXXXXXXXXXXXX | DR NOUVEAU PRATICIEN | 350,00 | 20260805 | 5902 | C | DERMATOLOGUE | OCCITANIE | 20260720 | 1 |
+| 666666666 | ps666666666@gmail.com | BUNKNOWNXXX | FRUNKNOWNXXXXXXXXXXXX | DR NOUVEAU PRATICIEN | 420,00 | 20260805 | 5955 | C | DERMATOLOGUE | OCCITANIE | 20260720 | 1 |
++-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
