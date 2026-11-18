@@ -170,3 +170,11 @@ cetip-bordereau-workflow/
 * **Établissement :** École Supérieure des Industries du Textile et de l'Habillement (**ESITH**)
 * **Filière :** Génie Industriel — Spécialisation *Business & Data Management* (B&DM)
 * **Organisme d'Accueil :** Cegedim Maroc (*Division Cegedim Insurance Solutions — Équipe Cetip*)
+
+---
+
+## ⚖️ Avertissement & Licence
+
+* **Usage académique & défensif uniquement :** Ce projet est un prototype réalisé dans le cadre d'un Projet de Fin d'Études (PFE) à des fins de démonstration, d'automatisation et de détection défensive d'anomalies. Il ne constitue pas un logiciel officiel ou de production de Cegedim / CETIP.
+* **Données 100 % synthétiques :** L'ensemble des fichiers d'exemple et scripts de test présents dans ce dépôt (`data/`, `db/`) contiennent exclusivement des données fictives générées pour les tests (aucune donnée réelle de patients, de professionnels de santé, ni de flux bancaires).
+* **Licence :** Distribué sous licence [MIT](LICENSE) — fourni *« en l'état »* (*AS IS*), sans aucune garantie ni responsabilité de l'auteur en cas d'usage détourné ou illicite.
