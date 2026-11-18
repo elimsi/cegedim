@@ -70,7 +70,7 @@ def page_vue_temps_reel():
     # Check last processed file from silver
     df_last = get_data("""
         SELECT MAX(date_ingestion) as last_exec, fichier_source 
-        FROM silver_traitements 
+        FROM public_silver.silver_traitements 
         GROUP BY fichier_source 
         ORDER BY last_exec DESC LIMIT 1
     """)
@@ -89,7 +89,7 @@ def page_vue_temps_reel():
             SUM(CASE WHEN flag_anomalie = 'ANOMALIE' THEN 1 ELSE 0 END) as anomalies,
             SUM(CASE WHEN incoherence_code_acte = TRUE THEN 1 ELSE 0 END) as incoherences_llm,
             SUM(montant) as montant_total
-        FROM silver_traitements
+        FROM public_silver.silver_traitements
     """)
     
     if not df_kpi.empty:
@@ -143,7 +143,7 @@ def page_fraud_investigator():
             id, num_ps, numvir, montant, 
             score_anomalie, 0 as ecart_vs_historique, 
             date_virement as date_execution
-        FROM silver_traitements 
+        FROM public_silver.silver_traitements 
         WHERE flag_anomalie = 'ANOMALIE' OR incoherence_code_acte = TRUE
         ORDER BY score_anomalie DESC
     """)
@@ -261,7 +261,7 @@ def page_performance():
     # 1. Volume par semaine
     df_vol = get_data("""
         SELECT date_jour as jour, SUM(nb_transactions) as volume, SUM(montant_journalier) as montant
-        FROM gold_fact_traitements
+        FROM public_gold.gold_fact_traitements
         GROUP BY date_jour
         ORDER BY date_jour
     """)
@@ -274,7 +274,7 @@ def page_performance():
     # 2. Montant par spécialité
     df_spec = get_data("""
         SELECT specialite, SUM(montant_journalier) as montant_total
-        FROM gold_fact_traitements
+        FROM public_gold.gold_fact_traitements
         GROUP BY specialite
         ORDER BY montant_total DESC
     """)
@@ -287,7 +287,7 @@ def page_performance():
     df_region = get_data("""
         SELECT region, 
                ROUND(((SUM(nb_transactions) - SUM(nb_anomalies)) * 100.0) / SUM(nb_transactions), 2) as clean_rate
-        FROM gold_fact_traitements
+        FROM public_gold.gold_fact_traitements
         GROUP BY region
     """)
     with col2:
